@@ -1,0 +1,71 @@
+
+#include "ESP32_NOW_Serial.h"
+#include "MacAddress.h"
+#include "WiFi.h"
+
+#include "esp_wifi.h"
+
+// 0: AP mode, 1: Station mode
+#define ESPNOW_WIFI_MODE_STATION 1
+
+#define ESPNOW_WIFI_CHANNEL 1
+
+#if ESPNOW_WIFI_MODE_STATION 
+    #define ESPNOW_WIFI_MODE WIFI_STA         
+    #define ESPNOW_WIFI_IF   WIFI_IF_STA      
+#else 
+    #define ESPNOW_WIFI_MODE WIFI_AP                // WiFi Mode
+    #define ESPNOW_WIFI_IF   WIFI_IF_AP             // WiFi Interface
+#endif
+
+// const MacAddress peer_mac({0x94, 0xE6, 0x86, 0x00, 0xF6, 0x90});
+const MacAddress peer_mac({0xE4, 0x65, 0xB8, 0x20, 0x92, 0x60});
+// const MacAddress peer_mac({0x94, 0xE6, 0x86, 0x00, 0xF6, 0x90});
+
+ESP_NOW_Serial_Class NowSerial(peer_mac, ESPNOW_WIFI_CHANNEL, ESPNOW_WIFI_IF);
+
+void setup() {
+    Serial.begin(115200);
+    pinMode(LED_BUILTIN, OUTPUT);
+    Serial.print("WiFi Mode: ");
+    Serial.println(ESPNOW_WIFI_MODE == WIFI_AP ? "AP" : "Station");
+    WiFi.mode(ESPNOW_WIFI_MODE);
+
+    Serial.print("Channel: ");
+    Serial.println(ESPNOW_WIFI_CHANNEL);
+    WiFi.setChannel(ESPNOW_WIFI_CHANNEL, WIFI_SECOND_CHAN_NONE);
+
+    while(!(WiFi.STA.started() || WiFi.AP.started())) delay(100);
+
+    Serial.print("MAC Address: ");
+    Serial.println(ESPNOW_WIFI_MODE == WIFI_AP ? WiFi.softAPmacAddress() : WiFi.macAddress());
+
+    // Start the ESP-NOW communication
+    Serial.println("ESP-NOW communication starting...");
+    NowSerial.begin(115200);
+    Serial.println("You can now send data to the peer device using the Serial Monitor.\n");
+    digitalWrite(LED_BUILTIN, HIGH);
+    delay(500);
+    digitalWrite(LED_BUILTIN, LOW);
+}
+
+void loop() {
+    while (NowSerial.available())
+    {
+        Serial.write(NowSerial.read());
+        digitalWrite(LED_BUILTIN, HIGH);
+        delay(500);
+        digitalWrite(LED_BUILTIN, LOW);
+    }
+
+    while (Serial.available() && NowSerial.availableForWrite())
+    {
+        if (NowSerial.write(Serial.read()) <= 0)
+        {
+            Serial.println("Failed to send data");
+            break;
+        }
+    }
+
+    delay(1);
+}

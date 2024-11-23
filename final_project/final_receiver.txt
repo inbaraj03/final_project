@@ -1,0 +1,147 @@
+#include <WiFi.h>
+#include <IOXhop_FirebaseESP32.h>  //ArduinoJson v5.13.2
+#include <ArduinoJson.h>
+#include <SoftwareSerial.h>
+
+#define RXD2 16
+#define TXD2 17
+
+#define FIREBASE_Host "chatapp-c68bc-default-rtdb.firebaseio.com" //lora-comm-default-rtdb.asia-southeast1.firebasedatabase.app
+#define FIREBASE_authorization_key "quIUuPXYhfTJP3eFkxJ3h44JMf1WRF5VfeIPUoiY"
+
+#define Your_SSID "SlowNet"
+#define Your_PASSWORD "jio5gnet"
+
+String generateRandomString(int length) {
+  const char charset[] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+  String randomString = "";
+  for (int i = 0; i < length; i++) {
+    randomString += charset[random(0, sizeof(charset))];
+  }
+  return randomString;
+}
+
+  String randomString;
+
+String receivedString, payload;
+int strLength, payloadSize;
+String FirebaseData,incoming; 
+String data,dataLength,data1;
+int DataPosition;
+
+void setup() {
+  Serial.begin(115200);
+  Serial1.begin(115200, SERIAL_8N1, RXD2, TXD2);
+  delay(1000); // Wait for Serial1 initialization
+
+  pinMode(LED_BUILTIN, OUTPUT);
+
+  WiFi.begin(Your_SSID, Your_PASSWORD);
+  Serial.print("Connecting to WiFi");
+
+  while (WiFi.status() != WL_CONNECTED) {
+    Serial.print(".");
+    delay(500);
+  }
+
+  Serial.println();
+  Serial.println("Connected to WiFi!");
+  Serial.print("IP Address: ");
+  Serial.println(WiFi.localIP());
+  
+  digitalWrite(LED_BUILTIN, HIGH);  
+  delay(500);                      
+  digitalWrite(LED_BUILTIN, LOW);
+  delay(500);
+  
+  Firebase.begin(FIREBASE_Host, FIREBASE_authorization_key);
+
+}
+
+void loop() {
+   if (Serial1.available()) {
+    fireData(); 
+  }
+}
+
+
+
+void fireData(){
+    incoming = Serial1.readString(); // Read the incoming data
+    Serial.println("Data: " + incoming);
+    delay(300);
+    
+    extractDataLength();
+    DataPosition = 8 + data.toInt();
+    extractData();
+
+    digitalWrite(LED_BUILTIN, HIGH);  
+    delay(500);                      
+    digitalWrite(LED_BUILTIN, LOW); 
+
+    randomString = generateRandomString(5);
+    Serial.println("Random String: " + randomString);
+
+    delay(300);
+
+    // Check if data extraction was successful
+    if (!data1.isEmpty()) {
+        Serial.println("Sending data to Firebase...");
+        Firebase.setString("LoRa/" + randomString + "/message", data1);
+        delay(300);
+        Firebase.setString("LoRa/" + randomString + "/latitude", "10.95747°N");
+        delay(300);
+        Firebase.setString("LoRa/" + randomString + "/longitude", "79.32931°W");
+        delay(300);
+
+        digitalWrite(LED_BUILTIN, HIGH);  
+        delay(500);                      
+        digitalWrite(LED_BUILTIN, LOW); 
+    } else {
+        Serial.println("Error: Data extraction failed!");
+    }
+}
+
+
+void extractDataLength() {
+  int start = incoming.indexOf("+RCV") + 7; 
+  int end = incoming.indexOf(",", start); 
+
+  if (start != -1 && end != -1) {
+    data = incoming.substring(start, end); 
+    dataLength = data.length();
+   } else {
+    Serial.println("Error extracting Data!");
+   }
+}
+
+void extractData() {
+  int start1 = incoming.indexOf("+RCV") + (8 + dataLength.toInt()); 
+  int end1 = incoming.indexOf(",", start1 + data.toInt()); 
+
+  if (start1 != -1 && end1 != -1) {
+    data1 = incoming.substring(start1, end1); 
+   } else {
+    Serial.println("Error extracting Data!");
+  }
+}
+
+void transmitData(){
+  if (Serial.available()) {
+    receivedString = Serial.readString();
+    strLength = receivedString.length(); 
+    payload = receivedString.substring(0, strLength - 2); 
+    payloadSize = payload.length(); 
+    
+    Serial.print("Transmit: ");
+    Serial.println(payload); 
+    
+    String command = "AT+SEND=0," + String(payloadSize, DEC) + "," + payload;
+    Serial.println("Sending command: " + command); 
+    Serial1.println(command);
+
+    digitalWrite(LED_BUILTIN, HIGH);  
+    delay(1000);                      
+    digitalWrite(LED_BUILTIN, LOW);
+  }
+}

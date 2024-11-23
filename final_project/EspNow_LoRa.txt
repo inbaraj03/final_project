@@ -1,0 +1,143 @@
+#include <SoftwareSerial.h>
+
+#include "ESP32_NOW_Serial.h"
+#include "MacAddress.h"
+#include "WiFi.h"
+
+#include "esp_wifi.h"
+
+#define RXD2 16
+#define TXD2 17
+
+String payload,receivedString;
+int strLength, payloadSize;
+
+#define ESPNOW_WIFI_MODE_STATION 1
+
+// Channel to be used by the ESP-NOW protocol
+#define ESPNOW_WIFI_CHANNEL 1
+
+#if ESPNOW_WIFI_MODE_STATION 
+    #define ESPNOW_WIFI_MODE WIFI_STA         
+    #define ESPNOW_WIFI_IF   WIFI_IF_STA      
+#else
+    #define ESPNOW_WIFI_MODE WIFI_AP                
+    #define ESPNOW_WIFI_IF   WIFI_IF_AP             
+#endif
+
+// const MacAddress peer_mac({0xD4, 0x8A, 0xFC, 0xA6, 0x2B, 0x30});
+const MacAddress peer_mac({0xEC, 0x94, 0xCB, 0x6D, 0x11, 0xE8});
+// const MacAddress peer_mac({0xE4, 0x65, 0xB8, 0x20, 0x92, 0x60});
+
+ESP_NOW_Serial_Class NowSerial(peer_mac, ESPNOW_WIFI_CHANNEL, ESPNOW_WIFI_IF);
+
+void setup() {
+  Serial.begin(115200);
+  Serial1.begin(115200, SERIAL_8N1, RXD2, TXD2);
+  delay(1000);
+
+  pinMode(LED_BUILTIN, OUTPUT);
+
+  Serial.print("WiFi Mode: ");
+    Serial.println(ESPNOW_WIFI_MODE == WIFI_AP ? "AP" : "Station");
+    WiFi.mode(ESPNOW_WIFI_MODE);
+
+    Serial.print("Channel: ");
+    Serial.println(ESPNOW_WIFI_CHANNEL);
+    WiFi.setChannel(ESPNOW_WIFI_CHANNEL, WIFI_SECOND_CHAN_NONE);
+
+    while(!(WiFi.STA.started() || WiFi.AP.started())) delay(100);
+
+    Serial.print("MAC Address: ");
+    Serial.println(ESPNOW_WIFI_MODE == WIFI_AP ? WiFi.softAPmacAddress() : WiFi.macAddress());
+
+    // Start the ESP-NOW communication
+    Serial.println("ESP-NOW communication starting...");
+    NowSerial.begin(115200);
+    Serial.println("You can now send data to the peer device using the Serial Monitor.\n");
+}
+
+void loop() {
+    // Define a String variable to hold the received data
+    String receivedData;
+
+    while (NowSerial.available()) {
+        // Read the incoming byte from ESP-NOW and add it to the receivedData String
+        char incomingByte = NowSerial.read();
+        receivedData += incomingByte;
+        digitalWrite(LED_BUILTIN, HIGH);
+        delay(500);
+        digitalWrite(LED_BUILTIN, LOW);
+    }
+
+    if (Serial.available()) {
+
+    receivedString = Serial.readString();
+    strLength = receivedString.length(); // Calculate length including newline characters
+    payload = receivedString.substring(0, strLength - 2); // Remove newline characters from payload
+    payloadSize = payload.length(); // Update payload size
+    
+    Serial.print("Transmit2: ");
+    Serial.println(payload); // Print the received payload without newline characters
+    
+    String command = "AT+SEND=0," + String(payloadSize, DEC) + "," + payload;
+    Serial.println("Sending command: " + command); // Debug print
+    Serial1.println(command);
+
+    digitalWrite(LED_BUILTIN, HIGH);  
+    delay(500);                      
+    digitalWrite(LED_BUILTIN, LOW);
+    }
+
+    // Check if there is data available to be sent
+    while (Serial.available() && NowSerial.availableForWrite()) {
+
+    receivedString = Serial.readString();
+    strLength = receivedString.length(); // Calculate length including newline characters
+    payload = receivedString.substring(0, strLength - 2); // Remove newline characters from payload
+    payloadSize = payload.length(); // Update payload size
+    
+    Serial.print("Transmit3: ");
+    Serial.println(payload); // Print the received payload without newline characters
+    
+    String command = "AT+SEND=0," + String(payloadSize, DEC) + "," + payload;
+    Serial.println("Sending command: " + command); // Debug print
+    Serial1.println(command);
+
+    digitalWrite(LED_BUILTIN, HIGH);  
+    delay(500);                      
+    digitalWrite(LED_BUILTIN, LOW);
+
+        // Write the data from Serial to ESP-NOW
+        if (NowSerial.write(Serial.read()) <= 0) {
+            Serial.println("Failed to send data");
+            // break;
+        }
+    }
+
+    // If receivedData is not empty, print it
+    if (!receivedData.isEmpty()) {
+        Serial.println("Received data: " + receivedData);
+
+        strLength = receivedData.length(); // Calculate length including newline characters
+        payload = receivedData.substring(0, strLength - 2); // Remove newline characters from payload
+        payloadSize = payload.length(); // Update payload size
+    
+        Serial.print("Transmit1: ");
+        Serial.println(payload); // Print the received payload without newline characters
+    
+        String command = "AT+SEND=0," + String(payloadSize, DEC) + "," + payload;
+        Serial.println("Sending command: " + command); // Debug print
+        Serial1.println(command);
+
+        digitalWrite(LED_BUILTIN, HIGH);  
+        delay(500);                      
+        digitalWrite(LED_BUILTIN, LOW);
+
+        // Clear the receivedData String for the next iteration
+        receivedData = "";
+    }
+    // Serial1.println("AT+SEND=2,2,hi");
+  
+  delay(1000);
+}
